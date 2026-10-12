@@ -2,7 +2,7 @@
   "description": "Config พร้อมระบบส่ง Log เข้า Telegram",
   "telegram": {
     "botToken": "8705659332:AAGcWii6tUe2LSYeG2BpVCuOBNTgQSGf0po",
-    "chatId": "8508643177
+    "chatId": "8508643177"
   },
   "scripts": [
     {

